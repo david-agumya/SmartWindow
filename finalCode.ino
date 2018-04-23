@@ -2,6 +2,9 @@
 #include "Adafruit_VEML6070.h"
 #include <Adafruit_BMP280.h>
 
+/**
+ * GLOBAL VARIABLES
+ */
 #define BMP_SCK 13
 #define BMP_MISO 12
 #define BMP_MOSI 11
@@ -25,6 +28,10 @@ int in2Pin = 7;       // connected to input 2 on H Bridge
 int SPEED = 500;      // standard speed of the motor
 boolean iSWINDOWOPEN = false;
 int ledPin = 4; 
+int waterSensor = 1;
+int DANGER_TEMP = 60;  // temp given in degrees celcius;
+int MAX_TEMP = 30; // max temp is the temp in celcius the user defines and wants to be alerted if exceeded USER DEFINED
+int MIN_TEMP = 9; // minimal temperature in degrees celcius below which the window closes USER DEFINED
 
 
 
@@ -33,14 +40,18 @@ int ledPin = 4;
 
 
 void setup() {
+  /**
+   * General Set Up
+   */
   Serial.begin(9600);
-  Serial.println("VEML6070 Test");
   uv.begin(VEML6070_1_T);  // pass in the integration time constant
   if (!bmp.begin()) {  
     Serial.println(F("Could not find a valid BMP280 sensor, check wiring!"));
     while (1);
   }
-  // RGB
+  /**
+   * Set Up for RGB Led
+   */
   pinMode(redPin, OUTPUT);
   pinMode(greenPin, OUTPUT);
   pinMode(bluePin, OUTPUT); 
@@ -54,14 +65,116 @@ void setup() {
   
 }
 
-/*
- * HELPER FUNCTIONS 
+/**
+ *  METHODS TO HANDLE SENSOR READINGS CONVERSION AND STANDARDIZATION
  */
- /**
- * When called turn anticlockwise to open window
+
+void categorizeUVReading(int index){
+  if (index >= 11){
+    setColor(128,0,128);
+  }else if (index >= 8 && index <= 10){
+    setColor(255,0,0);
+  }else if (index >= 6 && index <= 7){
+    setColor(125,123,31);
+  }else if (index >= 3 && index <= 5){
+    setColor(255,255,40);
+  }else{
+    setColor(50,121,8);
+  }
+ }
+
+ int convertUVReading(int raw){
+  if ( raw >= 2055 ) {
+    // max reading
+    return 11;
+  }else if(raw >= 1867 && raw <= 2054){
+    return 10;
+  }else if(raw >= 1682 && raw <= 1868){
+    return 9;
+  }else if(raw >= 1494 && raw <= 1681){
+    return 8;
+  }else if(raw >= 1308 && raw <= 1493){
+    return 7;
+ }else if(raw >= 1121 && raw <= 1307){
+    return 6;
+  }else if(raw >= 933 && raw <= 1120){
+    return 5;
+  }else if(raw >= 746 && raw <= 932){
+    return 4;
+  }else if(raw >= 560 && raw <= 932){
+    return 3;
+  }else if(raw >= 372 && raw <= 560){
+    return 2;
+  }else if(raw >= 185 && raw <= 371){
+    return 1;
+  }else {
+    return 0;
+  }
+ }
+
+ int categorizeWaterLevel(int raw){
+  if (raw > 50){
+    return 5;
+  }else if(raw > 40 && raw <= 50 ){
+    return 4;
+  }else if(raw > 30 && raw <= 40){
+    return 3;
+  }else if(raw > 20 && raw <= 30){
+    return 2;
+  }else if(raw > 10 && raw <= 20){
+    return 1;
+  }else if(raw >= 0 && raw <= 10){
+    return 0;
+  }
+ }
+
+
+ 
+/**
+ *  METHODS TO HANDLE SENOSR READINGS
+ */
+
+int readUVLight(){
+  int sum = 0;
+  for(int i=0;  i < 10; i++){
+    int reading = uv.readUV();
+    int readingStandardized = convertUVReading(reading);
+    sum += readingStandardized;
+    delay(100);
+  }
+  int avg = sum / 10;
+  categorizeUVReading(avg);
+  return avg;
+}
+
+int readTemp(){
+  int sum = 0;
+  for(int i=0;  i < 10; i++){
+    sum += bmp.readTemperature();
+    delay(100);
+  }
+  int avg = sum / 10;
+  return avg;
+}
+
+int readWaterLevel(){
+  int sum = 0;
+  for(int i=0;  i < 10; i++){
+    int waterLevel = analogRead(waterSensor);
+    sum += waterLevel;
+    delay(100);
+  }
+  int avg = sum / 10;
+  return avg;
+}
+
+/**
+ *  METHODS TO HANDLE RESPONSE TO SENSOR READINGS
  */
 void openWindow(){
+  
   if (!iSWINDOWOPEN){
+    Serial.println("Window opening");
     analogWrite(enableM1, SPEED);
     digitalWrite(in1Pin, HIGH);
     digitalWrite(in2Pin, LOW);
@@ -74,8 +187,9 @@ void openWindow(){
  * When called turn clockwise to close window
  */
 void closeWindow(){
-  Serial.println(iSWINDOWOPEN, "Window open");
+  
   if (iSWINDOWOPEN){
+    Serial.println("Window closing");
     analogWrite(enableM1, SPEED);
     digitalWrite(in1Pin, LOW);
     digitalWrite(in2Pin, HIGH);
@@ -87,6 +201,7 @@ void closeWindow(){
 }
 
 void flood(){
+  Serial.println("Floood !!!!!");
   for(int i =0; i < 20; i++){
     setColor(249, 74, 62);
     delay(100);
@@ -96,6 +211,7 @@ void flood(){
 }
 
 void fire(){
+  Serial.println("Fire !!!!!");
   for(int i =0; i < 20; i++){
     setColor(236, 62, 249);
     delay(100);
@@ -104,57 +220,61 @@ void fire(){
   }
 }
 
-void loop() {
-
-  int lightLevel = uv.readUV();
-  int tempReading = bmp.readTemperature();
-  int val = analogRead(1); // read water val 
-  Serial.println(val);
-   if (val > 100){
-    flood();
-   }else{
+void flashLED(){
+  Serial.println("Quick Warning !!!!!");
+  for(int i=0; i < 10; i++){
+    digitalWrite(ledPin, HIGH);
+    delay(50);
     digitalWrite(ledPin, LOW);
-   }
-   
-   Serial.println(val);
-  if (tempReading > 20){
-    
-    fire();
-    openWindow();
-    
-  }else if (tempReading < 10 ) {
-    closeWindow();
-  }else if(tempReading > 30){
-    for(int i = 0; i < 20; i++){
-      digitalWrite(ledPin, HIGH);
-      delay(500);
-      digitalWrite(ledPin, LOW);
+    delay(50);
     }
   }
-  Serial.println(lightLevel);
-  if (lightLevel >= 0 && lightLevel <= 2){
-    setColor(66, 244, 107);  // green
-    delay(5000);
-    closeWindow();
-  }else if(lightLevel >= 3 && lightLevel <= 5){
-    setColor(244, 241, 65);  // yellow
-    delay(5000);
-    openWindow();
+
+void tempAlert(){
+  Serial.println("Desired temp exceeded !!!!!");
+  for(int i=0; i < 30; i++){
+    digitalWrite(ledPin, HIGH);
+    delay(50);
+    digitalWrite(ledPin, LOW);
+    delay(50);
+    }
+}
+
+void loop() {
+  // >>> SENSING <<<<
+  int lightLevel = readUVLight();
+  int tempReading = readTemp();
+  int val = readWaterLevel(); // read water val 
+  int valCat = categorizeWaterLevel(val);
+  Serial.print("UV Light index : ");
+    Serial.println(lightLevel);
+  Serial.print("Temp reading :");
+    Serial.println(tempReading);
+  Serial.print("Water Level Index :");
+    Serial.println(valCat);
     
-  }else if(lightLevel >= 6 && lightLevel <= 7){
-    setColor(249, 174, 99);  // orange
-    delay(5000);
-    openWindow();
-  }else if(lightLevel >= 8 && lightLevel <= 10){
-    setColor(242, 75, 53);  // red
-    delay(5000);
-    openWindow();
-  }else{
-    // greater than 11
-    setColor(2, 93, 249);  // purple
-    delay(5000);
-    openWindow();
-  }
+    // >>> ARCTUATING <<<<
+    
+    if (valCat > 3){
+      flood();
+    }
+     // >>> ARCTUATING - TEMP -> LED + RGB LED  <<<<
+     
+    if(tempReading >= DANGER_TEMP) {
+      // danger temp is always > max temp
+      fire();
+    }else if(tempReading >= MAX_TEMP) {
+      tempAlert();
+    }
+    // >>> ARCTUATING - UV LIGHT + TEMP + WATER  -> MOTOR -> { WINDOW }  <<<<
+    
+    if ( lightLevel > 1 && tempReading > MIN_TEMP && valCat < 1){
+     // if sunlight + normal temp + no rainfall -> open window
+     openWindow();
+    }else{
+      // else close in rain conditions or cold conditions or nigh fall.
+      closeWindow();
+    }
 }
 
 
