@@ -1,9 +1,11 @@
 # Title
 ___
+### Smart Window Prototype
+__
 
 # Tag Line 
 ___
-+ A window that opens and closes itself based on changes in environment.
+### A window that opens and closes itself based on changes in environment.
 
 
 # Description 
