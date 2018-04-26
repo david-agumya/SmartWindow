@@ -156,7 +156,7 @@ void categorizeUVReading(int index){
  * Reference :  Ranges were derived from the UV VEML6070 sensor product specification
  */
  int convertUVReading(int raw){
-  if ( raw >= 2055 ) {
+  if ( raw >=  ) {
     // max reading
     return 11;
   }else if(raw >= 1867 && raw <= 2054){
@@ -189,15 +189,15 @@ void categorizeUVReading(int index){
  * @param raw : Integer represening the raw sensor readings from the water sensor.
  */
  int categorizeWaterLevel(int raw){
-  if (raw > 1000){
+  if (raw > 400){
     return 5;
-  }else if(raw > 800 && raw <= 1000 ){
+  }else if(raw > 350 && raw <= 400 ){
     return 4;
-  }else if(raw > 600 && raw <= 800){
+  }else if(raw > 300 && raw <= 350){
     return 3;
-  }else if(raw > 400 && raw <= 600){
+  }else if(raw > 150 && raw <= 300){
     return 2;
-  }else if(raw > 100 && raw <= 400){
+  }else if(raw > 100 && raw <= 150){
     return 1;
   }else if(raw >= 0 && raw <= 100){
     return 0;
@@ -218,12 +218,15 @@ int readUVLight(){
   int sum = 0;
   for(int i=0;  i < 10; i++){
     int reading = uv.readUV();
+    Serial.print("uv : ");
+  Serial.println(reading);
     int readingStandardized = convertUVReading(reading);
     sum += readingStandardized;
     delay(100);
   }
   int avg = sum / 10;
   categorizeUVReading(avg);
+  
   return avg;
 }
 
@@ -250,6 +253,8 @@ int readWaterLevel(){
     delay(100);
   }
   int avg = sum / 10;
+  Serial.print("water : ");
+  Serial.println(avg);
   return avg;
 }
 
@@ -365,7 +370,7 @@ void loop() {
     if (valCat >= 4){
       flood();
       // broadcast
-//      broadcastAlerts(0);
+      broadcastAlerts(0);
     }
      // >>> ARCTUATING - TEMP -> LED + RGB LED  <<<<
      
