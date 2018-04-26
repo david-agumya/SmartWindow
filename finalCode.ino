@@ -38,7 +38,7 @@ boolean iSWINDOWOPEN = false;
 int ledPin = 4; 
 int waterSensor = 1;
 int DANGER_TEMP = 60;  // temp given in degrees celcius;
-int MAX_TEMP = 30; // max temp is the temp in celcius the user defines and wants to be alerted if exceeded USER DEFINED
+int MAX_TEMP = 20; // max temp is the temp in celcius the user defines and wants to be alerted if exceeded USER DEFINED
 int MIN_TEMP = 9; // minimal temperature in degrees celcius below which the window closes USER DEFINED
 
 
@@ -46,7 +46,9 @@ int MIN_TEMP = 9; // minimal temperature in degrees celcius below which the wind
 //uncomment this line if using a Common Anode LED
 #define COMMON_ANODE
 
-
+/**
+ * Set up the environment variables. This runs only once.
+ */
 void setup() {
   
   /**
@@ -78,6 +80,14 @@ void setup() {
  *  METHODS TO DEAL WITH COMUNICATION
  *  PROTOCOL: AlertHome
  */
+
+ /**
+  * Listen for alerts from the another device with Xbee communication
+  * ALERTS that are responded to are
+  * 1) FIRE -> Open window to help disperse the flames
+  * 2) FLOOD -> Close windows to prevent water getting into the home.
+  * 3) BURGLARY -> Close the windows to prevent the burglar from getting away
+  */
 void listenForAlerts(){
   int alert = myNode.alertReceived();
   if (alert != AlertNode::NO_ALERT) {
@@ -87,18 +97,21 @@ void listenForAlerts(){
     Serial.print(" ");
     Serial.println(myNode.alertName(alert));
      if (alert == AlertNode::FIRE) {
-       openWindow(); // Action
+       openWindow();
      }else if(alert == AlertNode::FLOOD){
       closeWindow();
      }else if(alert == AlertNode::BURGLARY){
       closeWindow();
      }else if(alert == AlertNode::GAS){
-      openWindow(); // Action
+      openWindow();
      }
   }
 }
+
 /**
+ * Given a type of 0 or 1 broadcast the appropriate message =
  * @param : type : type of alert to broadcast 0 < type < 1
+ * @type 1 : FIRE incident detected by temp sensor, broadcast this to other smart home devices connected to Xbee radio receivers
  */
 void broadcastAlerts(int type){
   int alert;
@@ -114,24 +127,34 @@ void broadcastAlerts(int type){
     Serial.print(" ");
     Serial.println(myNode.alertName(alert));
 }
+
 /**
  *  METHODS TO HANDLE SENSOR READINGS CONVERSION AND STANDARDIZATION
  */
 
+/**
+ * Given a UV index set the color to the corresponding color in the range that the index falls
+ * @param index : integer representing the categorized uv index derived from the raw UV light sensor readings.
+ */
 void categorizeUVReading(int index){
   if (index >= 11){
-    setColor(128,0,128);
+    setColor(128,0,128); // purple - Extreme
   }else if (index >= 8 && index <= 10){
-    setColor(255,0,0);
+    setColor(255,0,0);  // red - Very High
   }else if (index >= 6 && index <= 7){
-    setColor(125,123,31);
+    setColor(125,123,31); // orange - High  
   }else if (index >= 3 && index <= 5){
-    setColor(255,255,40);
+    setColor(255,255,40);  // yellow - moderate
   }else{
-    setColor(50,121,8);
+    setColor(50,121,8); // green - low
   }
  }
 
+/**
+ * Given a raw UV light index return a category between 0 and 11 based on the range that the raw sensor reading falls
+ * @param raw : Integer representing the raw UV light sensor reading.
+ * Reference :  Ranges were derived from the UV VEML6070 sensor product specification
+ */
  int convertUVReading(int raw){
   if ( raw >= 2055 ) {
     // max reading
@@ -161,18 +184,22 @@ void categorizeUVReading(int index){
   }
  }
 
+/**
+ * Given a raw sensor reading from the water sensor return a category between 0 and 5 representing water level category.
+ * @param raw : Integer represening the raw sensor readings from the water sensor.
+ */
  int categorizeWaterLevel(int raw){
-  if (raw > 100){
+  if (raw > 1000){
     return 5;
-  }else if(raw > 80 && raw <= 100 ){
+  }else if(raw > 800 && raw <= 1000 ){
     return 4;
-  }else if(raw > 60 && raw <= 80){
+  }else if(raw > 600 && raw <= 800){
     return 3;
-  }else if(raw > 40 && raw <= 60){
+  }else if(raw > 400 && raw <= 600){
     return 2;
-  }else if(raw > 20 && raw <= 40){
+  }else if(raw > 100 && raw <= 400){
     return 1;
-  }else if(raw >= 0 && raw <= 20){
+  }else if(raw >= 0 && raw <= 100){
     return 0;
   }
  }
@@ -183,12 +210,15 @@ void categorizeUVReading(int index){
  *  METHODS TO HANDLE SENOSR READINGS
  */
 
+/**
+ * Read u v light sensor measurements, use an average sampling techniqiue 
+ * @return : integer representing the standardized u.v light readings
+ */
 int readUVLight(){
   int sum = 0;
   for(int i=0;  i < 10; i++){
     int reading = uv.readUV();
     int readingStandardized = convertUVReading(reading);
-    Serial.println(reading);
     sum += readingStandardized;
     delay(100);
   }
@@ -197,6 +227,9 @@ int readUVLight(){
   return avg;
 }
 
+/**
+ * Read temperature sensor measurements from the BMP280 sensor
+ */
 int readTemp(){
   int sum = 0;
   for(int i=0;  i < 10; i++){
@@ -206,7 +239,9 @@ int readTemp(){
   int avg = sum / 10;
   return avg;
 }
-
+/**
+ * Read water level sensor measurements
+ */
 int readWaterLevel(){
   int sum = 0;
   for(int i=0;  i < 10; i++){
@@ -221,6 +256,10 @@ int readWaterLevel(){
 /**
  *  METHODS TO HANDLE RESPONSE TO SENSOR READINGS
  */
+
+/*
+ * Drive the DC motor to open the window.
+ */
 void openWindow(){
   
   if (!iSWINDOWOPEN){
@@ -234,8 +273,8 @@ void openWindow(){
   }
 }
 /**
- * When called turn clockwise to close window
- */
+ * Drive the DC motor to close the window.
+  */
 void closeWindow(){
   
   if (iSWINDOWOPEN){
@@ -249,7 +288,10 @@ void closeWindow(){
   }
   
 }
-
+/**
+ * When flood conditions are detected then this function is called 
+ * Flashes RGB Led to alert the user to flood conditions.
+ */
 void flood(){
   Serial.println("Floood !!!!!");
   for(int i =0; i < 20; i++){
@@ -259,7 +301,9 @@ void flood(){
     delay(100);
   }
 }
-
+/**
+ * When 60 degrees celcius is exceeded then flash RGB Led to warn user.
+ */
 void fire(){
   Serial.println("Fire !!!!!");
   for(int i =0; i < 20; i++){
@@ -270,6 +314,9 @@ void fire(){
   }
 }
 
+/**
+ * Flash LED to alert the user
+ */
 void flashLED(){
   Serial.println("Quick Warning !!!!!");
   for(int i=0; i < 10; i++){
@@ -279,7 +326,9 @@ void flashLED(){
     delay(50);
     }
   }
-
+/**
+ * Flash LED to alert the user
+ */
 void tempAlert(){
   Serial.println("Desired temp exceeded !!!!!");
   for(int i=0; i < 30; i++){
@@ -290,15 +339,20 @@ void tempAlert(){
     }
 }
 
+/**
+ * MAIN LOGIC 
+ */
 void loop() {
+  
   // >>> LISTEN FOR ALERTS <<<<
-  listenForAlerts();
+//  listenForAlerts();
   
   // >>> SENSING <<<<
   int lightLevel = readUVLight();
   int tempReading = readTemp();
   int val = readWaterLevel(); // read water val 
   int valCat = categorizeWaterLevel(val);
+    Serial.println(lightLevel);
   Serial.print("UV Light index : ");
     Serial.println(lightLevel);
   Serial.print("Temp reading :");
@@ -311,7 +365,7 @@ void loop() {
     if (valCat >= 4){
       flood();
       // broadcast
-      broadcastAlerts(0);
+//      broadcastAlerts(0);
     }
      // >>> ARCTUATING - TEMP -> LED + RGB LED  <<<<
      
@@ -319,7 +373,7 @@ void loop() {
       // danger temp is always > max temp
       fire();
       // broadcast
-      broadcastAlerts(1);
+//      broadcastAlerts(1);
     }else if(tempReading >= MAX_TEMP) {
       tempAlert();
     }
@@ -334,7 +388,10 @@ void loop() {
     }
 }
 
-
+/**
+ * Given 3 integer values representing the intended the color intensity, write the corresponding 
+ * values to the RGB Led.
+ */
 void setColor(int red, int green, int blue)
 {
   #ifdef COMMON_ANODE
