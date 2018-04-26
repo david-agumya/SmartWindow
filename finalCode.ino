@@ -1,6 +1,14 @@
 #include <Wire.h>
 #include "Adafruit_VEML6070.h"
 #include <Adafruit_BMP280.h>
+#include <AlertNodeLib.h>   // to use XBee serial communications
+
+/**
+ * ALERTHOME SET UP
+ */
+const String myNodeName = "SMART WINDOW";
+// USING pin2 for TX pin3 for RX
+AlertNode myNode;
 
 /**
  * GLOBAL VARIABLES
@@ -40,6 +48,7 @@ int MIN_TEMP = 9; // minimal temperature in degrees celcius below which the wind
 
 
 void setup() {
+  
   /**
    * General Set Up
    */
@@ -65,6 +74,46 @@ void setup() {
   
 }
 
+/**
+ *  METHODS TO DEAL WITH COMUNICATION
+ *  PROTOCOL: AlertHome
+ */
+void listenForAlerts(){
+  int alert = myNode.alertReceived();
+  if (alert != AlertNode::NO_ALERT) {
+
+    Serial.print("*** Alert received: ");
+    Serial.print(alert);
+    Serial.print(" ");
+    Serial.println(myNode.alertName(alert));
+     if (alert == AlertNode::FIRE) {
+       openWindow(); // Action
+     }else if(alert == AlertNode::FLOOD){
+      closeWindow();
+     }else if(alert == AlertNode::BURGLARY){
+      closeWindow();
+     }else if(alert == AlertNode::GAS){
+      openWindow(); // Action
+     }
+  }
+}
+/**
+ * @param : type : type of alert to broadcast 0 < type < 1
+ */
+void broadcastAlerts(int type){
+  int alert;
+  if (type == 0){ // flood
+     alert = AlertNode::FLOOD;
+  }else if(type == 1){
+    alert = AlertNode::FIRE; // fire
+  }
+  myNode.sendAlert(alert);
+
+    Serial.print("*** Alert sent: ");
+    Serial.print(alert);
+    Serial.print(" ");
+    Serial.println(myNode.alertName(alert));
+}
 /**
  *  METHODS TO HANDLE SENSOR READINGS CONVERSION AND STANDARDIZATION
  */
@@ -113,17 +162,17 @@ void categorizeUVReading(int index){
  }
 
  int categorizeWaterLevel(int raw){
-  if (raw > 50){
+  if (raw > 100){
     return 5;
-  }else if(raw > 40 && raw <= 50 ){
+  }else if(raw > 80 && raw <= 100 ){
     return 4;
-  }else if(raw > 30 && raw <= 40){
+  }else if(raw > 60 && raw <= 80){
     return 3;
-  }else if(raw > 20 && raw <= 30){
+  }else if(raw > 40 && raw <= 60){
     return 2;
-  }else if(raw > 10 && raw <= 20){
+  }else if(raw > 20 && raw <= 40){
     return 1;
-  }else if(raw >= 0 && raw <= 10){
+  }else if(raw >= 0 && raw <= 20){
     return 0;
   }
  }
@@ -139,6 +188,7 @@ int readUVLight(){
   for(int i=0;  i < 10; i++){
     int reading = uv.readUV();
     int readingStandardized = convertUVReading(reading);
+    Serial.println(reading);
     sum += readingStandardized;
     delay(100);
   }
@@ -241,6 +291,9 @@ void tempAlert(){
 }
 
 void loop() {
+  // >>> LISTEN FOR ALERTS <<<<
+  listenForAlerts();
+  
   // >>> SENSING <<<<
   int lightLevel = readUVLight();
   int tempReading = readTemp();
@@ -255,14 +308,18 @@ void loop() {
     
     // >>> ARCTUATING <<<<
     
-    if (valCat > 3){
+    if (valCat >= 4){
       flood();
+      // broadcast
+      broadcastAlerts(0);
     }
      // >>> ARCTUATING - TEMP -> LED + RGB LED  <<<<
      
     if(tempReading >= DANGER_TEMP) {
       // danger temp is always > max temp
       fire();
+      // broadcast
+      broadcastAlerts(1);
     }else if(tempReading >= MAX_TEMP) {
       tempAlert();
     }
